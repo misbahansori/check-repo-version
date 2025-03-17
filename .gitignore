@@ -6,5 +6,6 @@ vendor/
 /.php-cs-fixer.cache
 .env
 .idea
+log
 
 results.csv
