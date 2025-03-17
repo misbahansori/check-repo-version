@@ -4,92 +4,96 @@ namespace App\Console\Commands;
 
 use Tempest\Console\HasConsole;
 use Tempest\Console\ConsoleCommand;
+use App\ProjectAnalyzers\PackageProjectAnalyzer;
+use App\ProjectAnalyzers\ComposerProjectAnalyzer;
 
 final readonly class CheckRepoVersionsCommand
 {
     use HasConsole;
 
-    #[ConsoleCommand(name: 'repo:check-versions')]
-    public function check()
-    {
-        $path = $this->ask('Enter the path to the repository', [
-            '~/gilgamesh/',
-        ]);
-        // Properly expand the tilde character for home directory
-        $path = str_replace('~', $_SERVER['HOME'] ?? $_SERVER['USERPROFILE'], $path);
+    private array $analyzers;
 
-        // Make sure path exists
+    public function __construct()
+    {
+        $this->analyzers = [
+            'composer.json' => new ComposerProjectAnalyzer(),
+            'package.json' => new PackageProjectAnalyzer()
+        ];
+    }
+
+    #[ConsoleCommand(name: 'repo:check-versions')]
+    public function check(string $path): void
+    {
+        $path = $this->normalizePath($path);
+
+        if (!$this->validatePath($path)) {
+            return;
+        }
+
+        $projectFiles = $this->scanForProjectFiles($path);
+
+        if (empty($projectFiles)) {
+            $this->writeln("<error>No project files found in {$path}</error>");
+            return;
+        }
+
+        $results = $this->analyzeProjects($projectFiles);
+        $this->displayResults($results);
+    }
+
+    private function normalizePath(string $path): string
+    {
+        return str_replace('~', $_SERVER['HOME'] ?? $_SERVER['USERPROFILE'], $path);
+    }
+
+    private function validatePath(string $path): bool
+    {
         if (!is_dir($path)) {
             $this->writeln("<error>Path not found: {$path}</error>");
-            return;
+            return false;
         }
 
         $this->writeln("<comment>Scanning: {$path}</comment>");
+        return true;
+    }
 
-        // scan the path for git composer.json or package.json files and get the contents
-        $composerJsonFiles = glob($path . '/**/composer.json', GLOB_BRACE);
-        $packageJsonFiles = glob($path . '/**/package.json', GLOB_BRACE);
+    private function scanForProjectFiles(string $path): array
+    {
+        $allFiles = [];
 
-        // Remove the debug statement that halts execution
-        // dd($composerJsonFiles);
-
-        if (empty($composerJsonFiles) && empty($packageJsonFiles)) {
-            $this->writeln("<error>No composer.json or package.json files found in {$path}</error>");
-            return;
+        foreach (array_keys($this->analyzers) as $filePattern) {
+            $files = glob($path . '/**/' . $filePattern, GLOB_BRACE);
+            if (!empty($files)) {
+                $allFiles[$filePattern] = $files;
+            }
         }
 
+        return $allFiles;
+    }
+
+    private function analyzeProjects(array $projectFiles): array
+    {
         $results = [];
 
-        foreach ($composerJsonFiles as $composerJsonFile) {
-            $composerJson = json_decode(file_get_contents($composerJsonFile), true);
-
-            // get the laravel version from the require key
-            $version = $composerJson['require']['laravel/framework'] ?? null;
-            $projectName = basename(dirname($composerJsonFile));
-
-            // Determine project type - if laravel isn't in dependencies, mark as unknown
-            $projectType = 'unknown';
-            if (isset($composerJson['require']['laravel/framework'])) {
-                $projectType = 'laravel';
+        foreach ($projectFiles as $fileType => $files) {
+            if (!isset($this->analyzers[$fileType])) {
+                continue;
             }
 
-            $results[] = [
-                'project' => $projectName,
-                'type' => $projectType,
-                'version' => $version,
-            ];
-        }
+            $analyzer = $this->analyzers[$fileType];
 
-        // check package.json files for nuxt version
-        foreach ($packageJsonFiles as $packageJsonFile) {
-            $packageJson = json_decode(file_get_contents($packageJsonFile), true);
-
-            // undefined array key nuxt
-            // $version = $packageJson['dependencies']['nuxt'] ?? $packageJson['devDependencies']['nuxt'];
-
-            // get the nuxt version from the package.json file
-            $dependencies = $packageJson['dependencies'] ?? [];
-            $devDependencies = $packageJson['devDependencies'] ?? [];
-
-            $version = $dependencies['nuxt'] ?? $devDependencies['nuxt'] ?? null;
-            $projectName = basename(dirname($packageJsonFile));
-
-            // Determine project type - if nuxt isn't in dependencies, mark as unknown
-            $projectType = 'unknown';
-            if (isset($dependencies['nuxt']) || isset($devDependencies['nuxt'])) {
-                $projectType = 'nuxt';
+            foreach ($files as $file) {
+                $results[] = $analyzer->analyze($file);
             }
-
-            $results[] = [
-                'project' => $projectName,
-                'type' => $projectType,
-                'version' => $version,
-            ];
         }
 
+        return $results;
+    }
+
+    private function displayResults(array $results): void
+    {
         $this->writeln('<h1>Repository versions:</h1>');
 
-        // Use the generic table display method
         $this->displayTable(
             $results,
             ['Project', 'Type', 'Version']
@@ -99,20 +103,26 @@ final readonly class CheckRepoVersionsCommand
         $this->writeln('<comment>Repository versions check completed.</comment>');
     }
 
-    /**
-     * Display results in a formatted table with borders
-     *
-     * @param array $rows The data rows to display
-     * @param array $headers The column headers
-     */
     private function displayTable(array $rows, array $headers): void
     {
-        // Calculate column widths based on content
+        $columnWidths = $this->calculateColumnWidths($rows, $headers);
+        $borderLine = $this->createBorderLine($columnWidths);
+
+        // Display table with borders
+        $this->writeln($borderLine);
+        $this->displayTableHeaders($headers, $columnWidths);
+        $this->writeln($this->createBorderLine($columnWidths, '=', '+'));
+        $this->displayTableRows($rows, $columnWidths);
+        $this->writeln($borderLine);
+    }
+
+    private function calculateColumnWidths(array $rows, array $headers): array
+    {
         $columnWidths = [];
 
         // Initialize with header lengths
         foreach ($headers as $index => $header) {
-            $columnWidths[$index] = strlen($header) + 2; // Add padding
+            $columnWidths[$index] = strlen($header) + 2;
         }
 
         // Adjust for content lengths
@@ -125,51 +135,51 @@ final readonly class CheckRepoVersionsCommand
             }
         }
 
-        // Create border line function
-        $createBorderLine = function ($char = '-', $intersection = '+') use ($columnWidths) {
-            $line = $intersection;
-            foreach ($columnWidths as $width) {
-                $line .= str_repeat($char, $width + 2) . $intersection;
-            }
-            return $line;
-        };
+        return $columnWidths;
+    }
 
-        // Top border
-        $this->writeln($createBorderLine());
+    private function createBorderLine(array $columnWidths, string $char = '-', string $intersection = '+'): string
+    {
+        $line = $intersection;
+        foreach ($columnWidths as $width) {
+            $line .= str_repeat($char, $width + 2) . $intersection;
+        }
+        return $line;
+    }
 
-        // Headers with borders
+    private function displayTableHeaders(array $headers, array $columnWidths): void
+    {
         $headerLine = '|';
         foreach ($headers as $index => $header) {
             $paddedHeader = ' ' . str_pad($header, $columnWidths[$index]) . ' ';
             $headerLine .= "<strong>{$paddedHeader}</strong>|";
         }
         $this->writeln($headerLine);
+    }
 
-        // Middle border
-        $this->writeln($createBorderLine('=', '+'));
-
-        // Data rows with borders
+    private function displayTableRows(array $rows, array $columnWidths): void
+    {
         foreach ($rows as $row) {
             $line = '|';
             $rowValues = array_values($row);
 
             foreach ($rowValues as $index => $value) {
                 $paddedValue = ' ' . str_pad((string)$value, $columnWidths[$index]) . ' ';
-
-                // Apply more subtle formatting without background colors
-                if ($value === null) {
-                    $line .= "<comment>{$paddedValue}</comment>|";
-                } elseif (!empty($value)) {
-                    $line .= "<em>{$paddedValue}</em>|";
-                } else {
-                    $line .= $paddedValue . '|';
-                }
+                $line .= $this->formatTableCell($value, $paddedValue) . '|';
             }
 
             $this->writeln($line);
         }
+    }
 
-        // Bottom border
-        $this->writeln($createBorderLine());
+    private function formatTableCell($value, string $paddedValue): string
+    {
+        if ($value === null) {
+            return "<comment>{$paddedValue}</comment>";
+        } elseif (!empty($value)) {
+            return "<em>{$paddedValue}</em>";
+        }
+
+        return $paddedValue;
     }
 }
