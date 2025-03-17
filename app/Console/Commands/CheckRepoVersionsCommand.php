@@ -38,6 +38,7 @@ final readonly class CheckRepoVersionsCommand
         }
 
         $results = $this->analyzeProjects($projectFiles);
+
         $this->displayResults($results);
     }
 
@@ -71,19 +72,40 @@ final readonly class CheckRepoVersionsCommand
         return $allFiles;
     }
 
+    /**
+     * Analyze projects found in the scan
+     */
     private function analyzeProjects(array $projectFiles): array
     {
         $results = [];
+        $analyzedProjects = [];
 
-        foreach ($projectFiles as $fileType => $files) {
-            if (!isset($this->analyzers[$fileType])) {
-                continue;
+        // First analyze all PHP/Composer projects
+        if (isset($projectFiles['composer.json'])) {
+            foreach ($projectFiles['composer.json'] as $file) {
+                $projectPath = dirname($file);
+                $projectResult = $this->analyzers['composer.json']->analyze($file);
+
+                // Keep track of analyzed projects and their types
+                $projectName = basename($projectPath);
+                $analyzedProjects[$projectName] = $projectResult['type'];
+
+                $results[] = $projectResult;
             }
+        }
 
-            $analyzer = $this->analyzers[$fileType];
+        // Then only analyze JavaScript/Package projects if they haven't been identified as Laravel
+        if (isset($projectFiles['package.json'])) {
+            foreach ($projectFiles['package.json'] as $file) {
+                $projectPath = dirname($file);
+                $projectName = basename($projectPath);
 
-            foreach ($files as $file) {
-                $results[] = $analyzer->analyze($file);
+                // Skip package.json analysis if project is already identified as Laravel
+                if (isset($analyzedProjects[$projectName]) && $analyzedProjects[$projectName] === 'laravel') {
+                    continue;
+                }
+
+                $results[] = $this->analyzers['package.json']->analyze($file);
             }
         }
 
