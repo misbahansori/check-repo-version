@@ -47,9 +47,15 @@ final readonly class CheckRepoVersionsCommand
             $version = $composerJson['require']['laravel/framework'] ?? null;
             $projectName = basename(dirname($composerJsonFile));
 
+            // Determine project type - if laravel isn't in dependencies, mark as unknown
+            $projectType = 'unknown';
+            if (isset($composerJson['require']['laravel/framework'])) {
+                $projectType = 'laravel';
+            }
+
             $results[] = [
                 'project' => $projectName,
-                'type' => 'laravel',
+                'type' => $projectType,
                 'version' => $version,
             ];
         }
