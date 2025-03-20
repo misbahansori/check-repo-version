@@ -21,7 +21,7 @@ final readonly class CheckRepoVersionsCommand
         ];
     }
 
-    #[ConsoleCommand(name: 'repo:check-versions')]
+    #[ConsoleCommand(name: 'repo:check')]
     public function check(string $path): void
     {
         $path = $this->normalizePath($path);
@@ -86,6 +86,9 @@ final readonly class CheckRepoVersionsCommand
                 $projectPath = dirname($file);
                 $projectResult = $this->analyzers['composer.json']->analyze($file);
 
+                // Add git branch information
+                $projectResult['branch'] = $this->getGitBranch($projectPath);
+
                 // Keep track of analyzed projects and their types
                 $projectName = basename($projectPath);
                 $analyzedProjects[$projectName] = $projectResult['type'];
@@ -105,11 +108,32 @@ final readonly class CheckRepoVersionsCommand
                     continue;
                 }
 
-                $results[] = $this->analyzers['package.json']->analyze($file);
+                $projectResult = $this->analyzers['package.json']->analyze($file);
+                $projectResult['branch'] = $this->getGitBranch($projectPath);
+                $results[] = $projectResult;
             }
         }
 
         return $results;
+    }
+
+    /**
+     * Get the current git branch for a project path
+     */
+    private function getGitBranch(string $path): ?string
+    {
+        // Check if directory is a git repository
+        if (!is_dir($path . '/.git')) {
+            return null;
+        }
+
+        // Run git command to get current branch
+        $currentDir = getcwd();
+        chdir($path);
+        $branch = trim(shell_exec('git branch --show-current 2>/dev/null') ?? '');
+        chdir($currentDir);
+
+        return $branch ?: null;
     }
 
     private function displayResults(array $results): void
@@ -118,7 +142,7 @@ final readonly class CheckRepoVersionsCommand
 
         $this->displayTable(
             $results,
-            ['Project', 'Type', 'Version']
+            ['Project', 'Type', 'Version', 'Branch']
         );
 
         $this->writeln('');
