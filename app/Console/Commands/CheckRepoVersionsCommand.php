@@ -54,7 +54,7 @@ final readonly class CheckRepoVersionsCommand
             return false;
         }
 
-        $this->writeln("<comment>Scanning: {$path}</comment>");
+        $this->writeln("Scanning: {$path}");
         return true;
     }
 
@@ -146,7 +146,7 @@ final readonly class CheckRepoVersionsCommand
         );
 
         $this->writeln('');
-        $this->writeln('<comment>Repository versions check completed.</comment>');
+        $this->writeln('Repository versions check completed.');
     }
 
     private function displayTable(array $rows, array $headers): void
@@ -221,7 +221,7 @@ final readonly class CheckRepoVersionsCommand
     private function formatTableCell($value, string $paddedValue): string
     {
         if ($value === null) {
-            return "<comment>{$paddedValue}</comment>";
+            return $paddedValue;
         } elseif (!empty($value)) {
             return "<em>{$paddedValue}</em>";
         }

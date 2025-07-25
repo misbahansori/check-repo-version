@@ -21,7 +21,7 @@ final readonly class PullReposCommand
         }
 
         // Find git repositories
-        $this->writeln("<comment>Scanning for Git repositories in {$path}</comment>");
+        $this->writeln("Scanning for Git repositories in {$path}");
         $repos = $this->findGitRepos($path);
 
         if (empty($repos)) {
@@ -75,7 +75,7 @@ final readonly class PullReposCommand
 
                 if (str_contains($switchOutput, 'error')) {
                     $this->writeln("  <error>Failed to switch branch</error>");
-                    $this->writeln("  <comment>{$switchOutput}</comment>");
+                    $this->writeln("  {$switchOutput}");
                     $results[] = $this->createResult($repoName, $currentBranch, 'error', "Failed to switch to {$mainBranch}: {$switchOutput}");
                     chdir($originalDir);
                     $this->writeln("");
@@ -93,7 +93,7 @@ final readonly class PullReposCommand
                 str_contains(strtolower($pullOutput), 'conflict')
             ) {
                 $this->writeln("  <error>Pull failed</error>");
-                $this->writeln("  <comment>{$pullOutput}</comment>");
+                $this->writeln("  {$pullOutput}");
                 $results[] = $this->createResult($repoName, $mainBranch, 'error', "Pull failed: {$pullOutput}");
             } else {
                 $this->writeln("  <success>Pull successful</success>");
@@ -164,7 +164,7 @@ final readonly class PullReposCommand
         $errorCount = count(array_filter($results, fn($r) => $r['status'] === 'error'));
         $skippedCount = count(array_filter($results, fn($r) => $r['status'] === 'skipped'));
 
-        $this->writeln("<success>Success: {$successCount}</success> | <error>Errors: {$errorCount}</error> | <comment>Skipped: {$skippedCount}</comment>");
+        $this->writeln("<success>Success: {$successCount}</success> | <error>Errors: {$errorCount}</error> | Skipped: {$skippedCount}");
         $this->writeln("");
 
         // Display table
@@ -225,7 +225,7 @@ final readonly class PullReposCommand
                     } elseif ($value === 'error') {
                         $cell = "<error>{$cell}</error>";
                     } elseif ($value === 'skipped') {
-                        $cell = "<comment>{$cell}</comment>";
+                        $cell = $cell;
                     }
                 }
 
