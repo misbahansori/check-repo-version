@@ -15,7 +15,7 @@ final readonly class CheckGitCommitsCommand
     use ConsoleTable;
 
     #[ConsoleCommand(name: 'repo:commits')]
-    public function check(?string $date = null, bool $cache = true,)
+    public function check(?string $date = null, ?string $author = null, bool $cache = true)
     {
         $path = $this->askForPath(shouldUseCache: $cache);
 
@@ -37,7 +37,11 @@ final readonly class CheckGitCommitsCommand
         $targetDate = $date ?: date('Y-m-d');
         $this->console->info("Checking commits for date: {$targetDate}");
 
-        $results = $this->processRepos($repos, $targetDate);
+        if ($author) {
+            $this->console->info("Filtering by author: {$author}");
+        }
+
+        $results = $this->processRepos($repos, $targetDate, $author);
 
         foreach ($results as $result) {
             if (empty($result['commits'])) continue;
@@ -52,7 +56,7 @@ final readonly class CheckGitCommitsCommand
         $this->console->info('Git commits check completed.');
     }
 
-    protected function processRepos(array $repos, string $targetDate): array
+    protected function processRepos(array $repos, string $targetDate, ?string $author = null): array
     {
         $results = [];
 
@@ -62,7 +66,7 @@ final readonly class CheckGitCommitsCommand
             $originalDir = getcwd();
             chdir($repo);
 
-            $commits = $this->getCommitsForDate($targetDate);
+            $commits = $this->getCommitsForDate($targetDate, $author);
 
             $results[] = [
                 'name'    => $repoName,
@@ -82,10 +86,16 @@ final readonly class CheckGitCommitsCommand
         return array_map('dirname', $gitDirs);
     }
 
-    private function getCommitsForDate(string $date): array
+    private function getCommitsForDate(string $date, ?string $author = null): array
     {
-        // Get commits for the specific date
-        $command = "git log --since='{$date} 00:00:00' --until='{$date} 23:59:59' --pretty=format:'%H|%an|%ad|%s' --date=short";
+        // Build git log command with optional author filter
+        $command = "git log --since='{$date} 00:00:00' --until='{$date} 23:59:59'";
+
+        if ($author) {
+            $command .= " --author='{$author}'";
+        }
+
+        $command .= " --pretty=format:'%H|%an|%ad|%s' --date=short";
 
         $output = shell_exec($command);
 
