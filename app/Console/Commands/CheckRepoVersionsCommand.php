@@ -48,7 +48,12 @@ final readonly class CheckRepoVersionsCommand
 
         $results = $this->analyzeProjects($projectFiles);
 
-        $this->displayResults($results);
+        $this->table(
+            headers: ['Project', 'Type', 'Version', 'Branch'],
+            rows: $results,
+        );
+
+        $this->console->info('Repository versions check completed.');
     }
 
     private function scanForProjectFiles(string $path): array
@@ -127,17 +132,5 @@ final readonly class CheckRepoVersionsCommand
         chdir($currentDir);
 
         return $branch ?: null;
-    }
-
-    private function displayResults(array $results): void
-    {
-        $this->console->info('Repository versions:');
-
-        $this->table(
-            headers: ['Project', 'Type', 'Version', 'Branch'],
-            rows: $results,
-        );
-
-        $this->console->info('Repository versions check completed.');
     }
 }
