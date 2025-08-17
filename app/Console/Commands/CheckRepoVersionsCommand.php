@@ -2,14 +2,20 @@
 
 namespace App\Console\Commands;
 
+use Tempest\Cache\Cache;
+use Tempest\Console\ExitCode;
 use Tempest\Console\HasConsole;
 use Tempest\Console\ConsoleCommand;
+use App\Console\Commands\Concerns\AskForPath;
+use App\Console\Commands\Concerns\ConsoleTable;
 use App\ProjectAnalyzers\PackageProjectAnalyzer;
 use App\ProjectAnalyzers\ComposerProjectAnalyzer;
 
 final readonly class CheckRepoVersionsCommand
 {
     use HasConsole;
+    use AskForPath;
+    use ConsoleTable;
 
     private array $analyzers;
 
@@ -22,40 +28,27 @@ final readonly class CheckRepoVersionsCommand
     }
 
     #[ConsoleCommand(name: 'repo:check')]
-    public function check(string $path): void
+    public function check(bool $cache =  true)
     {
-        $path = $this->normalizePath($path);
+        $path = $this->askForPath(shouldUseCache: $cache);
 
-        if (!$this->validatePath($path)) {
-            return;
+        if (!$path) {
+            $this->console->error("⚠️  Path: {$path} is invalid ");
+            return ExitCode::INVALID;
         }
+
+        $this->console->info("Scanning: {$path}");
 
         $projectFiles = $this->scanForProjectFiles($path);
 
         if (empty($projectFiles)) {
-            $this->writeln("<error>No project files found in {$path}</error>");
+            $this->console->error("No project files found in {$path}");
             return;
         }
 
         $results = $this->analyzeProjects($projectFiles);
 
         $this->displayResults($results);
-    }
-
-    private function normalizePath(string $path): string
-    {
-        return str_replace('~', $_SERVER['HOME'] ?? $_SERVER['USERPROFILE'], $path);
-    }
-
-    private function validatePath(string $path): bool
-    {
-        if (!is_dir($path)) {
-            $this->writeln("<error>Path not found: {$path}</error>");
-            return false;
-        }
-
-        $this->writeln("Scanning: {$path}");
-        return true;
     }
 
     private function scanForProjectFiles(string $path): array
@@ -138,94 +131,13 @@ final readonly class CheckRepoVersionsCommand
 
     private function displayResults(array $results): void
     {
-        $this->writeln('<h1>Repository versions:</h1>');
+        $this->console->info('Repository versions:');
 
-        $this->displayTable(
-            $results,
-            ['Project', 'Type', 'Version', 'Branch']
+        $this->table(
+            headers: ['Project', 'Type', 'Version', 'Branch'],
+            rows: $results,
         );
 
-        $this->writeln('');
-        $this->writeln('Repository versions check completed.');
-    }
-
-    private function displayTable(array $rows, array $headers): void
-    {
-        $columnWidths = $this->calculateColumnWidths($rows, $headers);
-        $borderLine = $this->createBorderLine($columnWidths);
-
-        // Display table with borders
-        $this->writeln($borderLine);
-        $this->displayTableHeaders($headers, $columnWidths);
-        $this->writeln($this->createBorderLine($columnWidths, '=', '+'));
-        $this->displayTableRows($rows, $columnWidths);
-        $this->writeln($borderLine);
-    }
-
-    private function calculateColumnWidths(array $rows, array $headers): array
-    {
-        $columnWidths = [];
-
-        // Initialize with header lengths
-        foreach ($headers as $index => $header) {
-            $columnWidths[$index] = strlen($header) + 2;
-        }
-
-        // Adjust for content lengths
-        foreach ($rows as $row) {
-            foreach (array_values($row) as $index => $value) {
-                $valueLength = strlen((string)$value);
-                if (isset($columnWidths[$index])) {
-                    $columnWidths[$index] = max($columnWidths[$index], $valueLength + 2);
-                }
-            }
-        }
-
-        return $columnWidths;
-    }
-
-    private function createBorderLine(array $columnWidths, string $char = '-', string $intersection = '+'): string
-    {
-        $line = $intersection;
-        foreach ($columnWidths as $width) {
-            $line .= str_repeat($char, $width + 2) . $intersection;
-        }
-        return $line;
-    }
-
-    private function displayTableHeaders(array $headers, array $columnWidths): void
-    {
-        $headerLine = '|';
-        foreach ($headers as $index => $header) {
-            $paddedHeader = ' ' . str_pad($header, $columnWidths[$index]) . ' ';
-            $headerLine .= "<strong>{$paddedHeader}</strong>|";
-        }
-        $this->writeln($headerLine);
-    }
-
-    private function displayTableRows(array $rows, array $columnWidths): void
-    {
-        foreach ($rows as $row) {
-            $line = '|';
-            $rowValues = array_values($row);
-
-            foreach ($rowValues as $index => $value) {
-                $paddedValue = ' ' . str_pad((string)$value, $columnWidths[$index]) . ' ';
-                $line .= $this->formatTableCell($value, $paddedValue) . '|';
-            }
-
-            $this->writeln($line);
-        }
-    }
-
-    private function formatTableCell($value, string $paddedValue): string
-    {
-        if ($value === null) {
-            return $paddedValue;
-        } elseif (!empty($value)) {
-            return "<em>{$paddedValue}</em>";
-        }
-
-        return $paddedValue;
+        $this->console->info('Repository versions check completed.');
     }
 }
