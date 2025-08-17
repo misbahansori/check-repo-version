@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+
 use Tempest\Console\ExitCode;
 use Tempest\Console\HasConsole;
 use Tempest\Console\ConsoleCommand;
+use Tempest\Support\Str\ImmutableString;
 use App\Console\Commands\Concerns\AskForPath;
 use App\Console\Commands\Concerns\ConsoleTable;
 
@@ -89,6 +91,8 @@ final readonly class PullReposCommand
                     chdir($originalDir);
                     continue;
                 }
+            } else {
+                $this->console->info("  Already on main branch {$mainBranch}");
             }
 
             // Pull latest changes
@@ -161,93 +165,14 @@ final readonly class PullReposCommand
     private function createResult(string $repo, string $branch, string $status, string $message): array
     {
         return [
-            'repo' => $repo,
-            'branch' => $branch,
-            'status' => $status,
-            'message' => $message
+            'repository' => $repo,
+            'branch'     => $branch,
+            'status'     => $status,
+            'message'    => substr(new ImmutableString($message)
+                ->replace("\n", ' ')
+                ->replace("\r", ' ')
+                ->trim()
+                ->toString(), 0, 50) . '...',
         ];
-    }
-
-    private function displaySummary(array $results): void
-    {
-        $this->writeln("<h1>Pull Summary</h1>");
-
-        // Count by status
-        $successCount = count(array_filter($results, fn($r) => $r['status'] === 'success'));
-        $errorCount = count(array_filter($results, fn($r) => $r['status'] === 'error'));
-        $skippedCount = count(array_filter($results, fn($r) => $r['status'] === 'skipped'));
-
-        $this->writeln("<success>Success: {$successCount}</success> | <error>Errors: {$errorCount}</error> | Skipped: {$skippedCount}");
-        $this->writeln("");
-
-        // Display table
-        $this->displayTable($results, ['Repository', 'Branch', 'Status', 'Message']);
-    }
-
-    private function displayTable(array $rows, array $headers): void
-    {
-        // Calculate column widths
-        $widths = [];
-        foreach ($headers as $i => $header) {
-            $widths[$i] = strlen($header);
-        }
-
-        foreach ($rows as $row) {
-            $values = array_values($row);
-            foreach ($values as $i => $value) {
-                if ($i === 3) { // Message column
-                    $width = min(50, strlen($value)); // Limit message width
-                } else {
-                    $width = strlen($value);
-                }
-                $widths[$i] = max($widths[$i] ?? 0, $width);
-            }
-        }
-
-        // Headers
-        $separator = '+';
-        $headerRow = '|';
-
-        foreach ($widths as $i => $width) {
-            $separator .= str_repeat('-', $width + 2) . '+';
-            $headerRow .= ' ' . str_pad($headers[$i], $width) . ' |';
-        }
-
-        $this->writeln($separator);
-        $this->writeln($headerRow);
-        $this->writeln(str_replace('-', '=', $separator));
-
-        // Rows
-        foreach ($rows as $row) {
-            $values = array_values($row);
-            $tableRow = '|';
-
-            foreach ($values as $i => $value) {
-                if ($i === 3) { // Message column
-                    $value = strlen($value) > $widths[$i]
-                        ? substr($value, 0, $widths[$i] - 3) . '...'
-                        : $value;
-                }
-
-                $cell = ' ' . str_pad($value, $widths[$i]) . ' ';
-
-                // Apply formatting based on column and value
-                if ($i === 2) { // Status column
-                    if ($value === 'success') {
-                        $cell = "<success>{$cell}</success>";
-                    } elseif ($value === 'error') {
-                        $cell = "<error>{$cell}</error>";
-                    } elseif ($value === 'skipped') {
-                        $cell = $cell;
-                    }
-                }
-
-                $tableRow .= $cell . '|';
-            }
-
-            $this->writeln($tableRow);
-        }
-
-        $this->writeln($separator);
     }
 }
