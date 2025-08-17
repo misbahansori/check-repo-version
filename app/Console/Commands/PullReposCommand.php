@@ -168,11 +168,12 @@ final readonly class PullReposCommand
             'repository' => $repo,
             'branch'     => $branch,
             'status'     => $status,
-            'message'    => substr(new ImmutableString($message)
+            'message'    => new ImmutableString($message)
                 ->replace("\n", ' ')
                 ->replace("\r", ' ')
                 ->trim()
-                ->toString(), 0, 50) . '...',
+                ->truncate(50, '...')
+                ->toString(),
         ];
     }
 }
