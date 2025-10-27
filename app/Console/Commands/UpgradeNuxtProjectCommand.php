@@ -82,34 +82,26 @@ final readonly class UpgradeNuxtProjectCommand
 
         $this->console->info("Found " . count($projects) . " Nuxt projects");
 
-        // Use search() to allow user to filter and select
-        $selected = $this->console->search(
-            label: 'Select a project to upgrade',
-            search: function (string $query) use ($projects): array {
-                // Filter projects based on search query
-                $filtered = array_filter($projects, function ($project) use ($query) {
-                    return str_contains(strtolower($project['name']), strtolower($query));
-                });
+        // Build options array for selection
+        $options = [];
+        foreach ($projects as $project) {
+            $options[] = "{$project['name']} (Nuxt {$project['version']})";
+        }
 
-                // Format for search results display
-                $results = [];
-                foreach ($filtered as $project) {
-                    $results[$project['name']] = "{$project['name']} (Nuxt {$project['version']})";
-                }
-
-                return $results;
-            }
+        // Use ask() with options for selection
+        $choice = $this->ask(
+            question: 'Select a project to upgrade',
+            options: $options
         );
 
-        if (!$selected) {
+        if (!$choice) {
             return null;
         }
 
-        // Find the selected project by name
-        foreach ($projects as $project) {
-            if ($project['name'] === $selected) {
-                return $project;
-            }
+        // Find the selected project by index
+        $index = intval($choice);
+        if ($index >= 0 && $index < count($projects)) {
+            return $projects[$index];
         }
 
         return null;
@@ -123,15 +115,72 @@ final readonly class UpgradeNuxtProjectCommand
         $originalDir = getcwd();
         chdir($project['path']);
 
+        // Check for uncommitted changes
+        if ($this->hasUncommittedChanges()) {
+            $this->console->error("Uncommitted changes detected. Please commit or stash changes first.");
+            chdir($originalDir);
+            return;
+        }
+
+        // Determine main branch
+        $mainBranch = $this->determineMainBranch();
+        if (!$mainBranch) {
+            $this->console->error("Could not determine main branch");
+            chdir($originalDir);
+            return;
+        }
+
+        $this->console->info("Main branch: {$mainBranch}");
+
+        // Checkout main branch
+        $currentBranch = $this->getCurrentBranch();
+        if ($currentBranch !== $mainBranch) {
+            $this->console->info("Checking out {$mainBranch}...");
+            $output = shell_exec("git checkout {$mainBranch} 2>&1");
+            if (str_contains(strtolower($output), 'error')) {
+                $this->console->error("Failed to checkout {$mainBranch}: {$output}");
+                chdir($originalDir);
+                return;
+            }
+        } else {
+            $this->console->info("Already on {$mainBranch}");
+        }
+
+        // Pull latest changes
+        $this->console->info("Pulling latest changes...");
+        $output = shell_exec("git pull 2>&1");
+        if (str_contains(strtolower($output), 'error') || str_contains(strtolower($output), 'fatal')) {
+            $this->console->error("Pull failed: {$output}");
+            chdir($originalDir);
+            return;
+        }
+
+        // Get the new Nuxt version after upgrade
+        $this->console->writeln('');
+
         // Run npx nuxi upgrade --dedupe
         $this->console->info("Running: npx nuxi upgrade --dedupe");
         $this->console->writeln('');
 
-        $output = [];
-        $returnCode = 0;
-        exec('npx nuxi upgrade --dedupe 2>&1', $output, $returnCode);
+        $this->runCommandRealtime('npx --yes nuxi upgrade --dedupe');
 
-        $this->displayCommandOutput($output, $returnCode);
+        // Read the updated package.json to get the new version
+        $packageJsonPath = $project['path'] . '/package.json';
+        $packageJson = json_decode(file_get_contents($packageJsonPath), true);
+        $newVersion = $packageJson['dependencies']['nuxt'] ?? $packageJson['devDependencies']['nuxt'] ?? 'unknown';
+
+        $this->console->writeln('');
+        $this->console->info("New Nuxt version: {$newVersion}");
+
+        // Create a new branch with the version name
+        $versionBranchName = "upgrade/nuxt-{$newVersion}";
+        $this->console->info("Creating branch: {$versionBranchName}");
+        $output = shell_exec("git checkout -b {$versionBranchName} 2>&1");
+        if (str_contains(strtolower($output), 'error')) {
+            $this->console->error("Failed to create branch: {$output}");
+            chdir($originalDir);
+            return;
+        }
 
         $this->console->writeln('');
 
@@ -139,28 +188,70 @@ final readonly class UpgradeNuxtProjectCommand
         $this->console->info("Running: npx taze -w");
         $this->console->writeln('');
 
-        $output = [];
-        $returnCode = 0;
-        exec('npx taze -w 2>&1', $output, $returnCode);
-
-        $this->displayCommandOutput($output, $returnCode);
+        $this->runCommandRealtime('npx taze -w');
 
         chdir($originalDir);
 
         $this->console->writeln('');
         $this->console->info('✓ Nuxt project upgrade completed.');
+        $this->console->info("Branch created: {$versionBranchName}");
     }
 
-    private function displayCommandOutput(array $output, int $returnCode): void
+    private function runCommandRealtime(string $command): void
     {
-        foreach ($output as $line) {
-            $this->console->writeln("  {$line}");
+        $process = popen($command . ' 2>&1', 'r');
+
+        if (!$process) {
+            $this->console->error("Failed to execute command: {$command}");
+            return;
         }
 
-        if ($returnCode !== 0) {
-            $this->console->error("Command exited with code: {$returnCode}");
-        } else {
-            $this->console->info("✓ Command completed successfully");
+        while (!feof($process)) {
+            $line = fgets($process);
+            if ($line !== false && trim($line) !== '') {
+                $this->console->writeln("  " . trim($line));
+            }
         }
+
+        pclose($process);
+    }
+
+    private function displayCommandOutput(?string $output): void
+    {
+        if ($output && trim($output) !== '') {
+            $lines = explode("\n", trim($output));
+            foreach ($lines as $line) {
+                if (trim($line) !== '') {
+                    $this->console->writeln("  {$line}");
+                }
+            }
+        }
+    }
+
+    private function getCurrentBranch(): string
+    {
+        $branchOutput = shell_exec("git branch --show-current");
+        return $branchOutput !== null ? trim($branchOutput) : 'unknown';
+    }
+
+    private function determineMainBranch(): ?string
+    {
+        // Check common main branch names
+        $commonBranches = ['main', 'master', 'develop', 'trunk'];
+        foreach ($commonBranches as $branch) {
+            $result = shell_exec("git branch --list {$branch}");
+            if ($result !== null && str_contains($result, $branch)) {
+                return $branch;
+            }
+        }
+
+        // No main branch found
+        return null;
+    }
+
+    private function hasUncommittedChanges(): bool
+    {
+        $status = shell_exec('git status --porcelain');
+        return $status !== null && trim($status) !== '';
     }
 }
