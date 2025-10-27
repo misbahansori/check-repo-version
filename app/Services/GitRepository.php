@@ -13,7 +13,7 @@ final readonly class GitRepository
      */
     public function getCurrentBranch(): string
     {
-        $branchOutput = shell_exec("cd {$this->repositoryPath} && git branch --show-current");
+        $branchOutput = @shell_exec("cd {$this->repositoryPath} 2>/dev/null && git branch --show-current 2>/dev/null");
         return $branchOutput !== null ? trim($branchOutput) : 'unknown';
     }
 
@@ -25,7 +25,7 @@ final readonly class GitRepository
     {
         $commonBranches = ['main', 'master', 'develop', 'trunk'];
         foreach ($commonBranches as $branch) {
-            $result = shell_exec("cd {$this->repositoryPath} && git branch --list {$branch}");
+            $result = @shell_exec("cd {$this->repositoryPath} 2>/dev/null && git branch --list {$branch} 2>/dev/null");
             if ($result !== null && str_contains($result, $branch)) {
                 return $branch;
             }
@@ -39,7 +39,7 @@ final readonly class GitRepository
      */
     public function hasUncommittedChanges(): bool
     {
-        $status = shell_exec("cd {$this->repositoryPath} && git status --porcelain");
+        $status = shell_exec("cd {$this->repositoryPath} && git status --porcelain 2>/dev/null");
         return $status !== null && trim($status) !== '';
     }
 
