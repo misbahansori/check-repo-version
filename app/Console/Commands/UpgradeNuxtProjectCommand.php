@@ -41,14 +41,22 @@ final readonly class UpgradeNuxtProjectCommand
             return ExitCode::INVALID;
         }
 
-        $selectedProject = $this->selectProject($nuxtProjects);
+        $selectedProjects = $this->selectProject($nuxtProjects);
 
-        if (!$selectedProject) {
-            $this->console->info("No project selected");
+        if (!$selectedProjects || empty($selectedProjects)) {
+            $this->console->info("No projects selected");
             return ExitCode::SUCCESS;
         }
 
-        $this->upgradeProject($selectedProject);
+        $this->console->info("Upgrading " . count($selectedProjects) . " project(s)...");
+        $this->console->writeln('');
+
+        foreach ($selectedProjects as $project) {
+            $this->upgradeProject($project);
+            $this->console->writeln('');
+        }
+
+        $this->console->info('✓ All projects upgraded successfully.');
     }
 
     private function findNuxtProjects(string $path): array
@@ -79,14 +87,14 @@ final readonly class UpgradeNuxtProjectCommand
     {
         if (count($projects) === 1) {
             $this->console->info("Found 1 Nuxt project: {$projects[0]['name']}");
-            return $projects[0];
+            return [$projects[0]];
         }
 
         $this->console->info("Found " . count($projects) . " Nuxt projects");
 
         // Use search() for project selection
-        $selectedProject = $this->search(
-            label: 'Select a project to upgrade',
+        $selectedProjects = $this->search(
+            label: 'Select project(s) to upgrade',
             search: function (string $search) use ($projects): array {
                 $filtered = array_filter($projects, function ($project) use ($search) {
                     return stripos($project['name'], $search) !== false ||
@@ -97,22 +105,26 @@ final readonly class UpgradeNuxtProjectCommand
                     return "{$project['name']} (Nuxt {$project['version']})";
                 }, $filtered);
             },
-            multiple: false
+            multiple: true
         );
 
-        if (!$selectedProject) {
+        if (!$selectedProjects || empty($selectedProjects)) {
             return null;
         }
 
-        // Find the selected project by matching the display string
+        // Handle both single string and array of strings
+        $selectedProjectStrings = is_array($selectedProjects) ? $selectedProjects : [$selectedProjects];
+
+        // Find the selected projects by matching the display strings
+        $selectedProjectsArray = [];
         foreach ($projects as $project) {
             $displayString = "{$project['name']} (Nuxt {$project['version']})";
-            if ($displayString === $selectedProject) {
-                return $project;
+            if (in_array($displayString, $selectedProjectStrings)) {
+                $selectedProjectsArray[] = $project;
             }
         }
 
-        return null;
+        return empty($selectedProjectsArray) ? null : $selectedProjectsArray;
     }
 
     private function upgradeProject(array $project): void
