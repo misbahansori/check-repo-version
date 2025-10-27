@@ -1,179 +1,120 @@
 <?php
 
-namespace Tests\Services;
-
 use App\Services\GitRepository;
-use PHPUnit\Framework\TestCase;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 
-final class GitRepositoryTest extends TestCase
-{
-    private string $testRepoPath;
+beforeEach(function () {
+    $this->testRepoPath = sys_get_temp_dir() . '/test-git-repo-' . uniqid();
+    mkdir($this->testRepoPath, 0777, true);
 
-    protected function setUp(): void
-    {
-        parent::setUp();
+    chdir($this->testRepoPath);
+    shell_exec('git init --quiet');
+    shell_exec('git config user.name "Test"');
+    shell_exec('git config user.email "test@example.com"');
 
-        // Create a temporary test repository
-        $this->testRepoPath = sys_get_temp_dir() . '/test-git-repo-' . uniqid();
-        mkdir($this->testRepoPath, 0777, true);
+    file_put_contents($this->testRepoPath . '/README.md', '# Test Repository');
+    shell_exec('git add .');
+    shell_exec('git commit -m "Initial commit" --quiet');
+});
 
-        // Initialize a git repository for testing
-        chdir($this->testRepoPath);
-        shell_exec('git init --quiet');
-        shell_exec('git config user.name "Test"');
-        shell_exec('git config user.email "test@example.com"');
-
-        // Create an initial commit
-        file_put_contents($this->testRepoPath . '/README.md', '# Test Repository');
-        shell_exec('git add .');
-        shell_exec('git commit -m "Initial commit" --quiet');
+afterEach(function () {
+    if (is_dir($this->testRepoPath)) {
+        deleteDirectory($this->testRepoPath);
     }
+});
 
-    protected function tearDown(): void
-    {
-        // Clean up the test repository
-        if (is_dir($this->testRepoPath)) {
-            $this->deleteDirectory($this->testRepoPath);
-        }
+it('returns main or master when on main branch', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        parent::tearDown();
-    }
+    $branch = $gitRepo->getCurrentBranch();
 
-    private function deleteDirectory(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
+    expect($branch)->toBeIn(['main', 'master']);
+})->covers(GitRepository::class);
 
-        $files = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST
-        );
+it('determines main branch correctly', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        foreach ($files as $fileinfo) {
-            $fileinfo->isDir() ? rmdir($fileinfo->getRealPath()) : unlink($fileinfo->getRealPath());
-        }
+    $mainBranch = $gitRepo->determineMainBranch();
 
-        rmdir($dir);
-    }
+    expect($mainBranch)->not->toBeNull()
+        ->and($mainBranch)
+        ->toBeIn(['main', 'master']);
+})->covers(GitRepository::class);
 
-    public function testGetCurrentBranchReturnsMainWhenOnMain(): void
-    {
-        // The repository starts on 'main' branch by default
-        $gitRepo = new GitRepository($this->testRepoPath);
+it('returns false when repository is clean', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        $branch = $gitRepo->getCurrentBranch();
+    $hasChanges = $gitRepo->hasUncommittedChanges();
 
-        // Git 2.28+ uses 'main' as default, older versions use 'master'
-        $this->assertContains($branch, ['main', 'master'], "Branch should be 'main' or 'master'");
-    }
+    expect($hasChanges)->toBeFalse();
+})->covers(GitRepository::class);
 
-    public function testDetermineMainBranchReturnsMainWhenItExists(): void
-    {
-        $gitRepo = new GitRepository($this->testRepoPath);
+it('returns true when there are uncommitted changes', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        $mainBranch = $gitRepo->determineMainBranch();
+    file_put_contents($this->testRepoPath . '/test.txt', 'test content');
 
-        // Should detect main or master depending on Git version
-        $this->assertNotNull($mainBranch);
-        $this->assertContains($mainBranch, ['main', 'master']);
-    }
+    $hasChanges = $gitRepo->hasUncommittedChanges();
 
-    public function testHasUncommittedChangesReturnsFalseWhenClean(): void
-    {
-        $gitRepo = new GitRepository($this->testRepoPath);
+    expect($hasChanges)->toBeTrue();
+})->covers(GitRepository::class);
 
-        $hasChanges = $gitRepo->hasUncommittedChanges();
+it('returns false when checking out nonexistent branch', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        $this->assertFalse($hasChanges, 'Repository should be clean after initial commit');
-    }
+    $result = $gitRepo->checkout('nonexistent-branch');
 
-    public function testHasUncommittedChangesReturnsTrueWhenThereAreChanges(): void
-    {
-        $gitRepo = new GitRepository($this->testRepoPath);
+    expect($result)->toBeFalse();
+})->covers(GitRepository::class);
 
-        // Create an uncommitted change
-        file_put_contents($this->testRepoPath . '/test.txt', 'test content');
+it('creates and checks out new branch', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        $hasChanges = $gitRepo->hasUncommittedChanges();
+    $result = $gitRepo->checkoutNewBranch('feature/test-branch');
 
-        $this->assertTrue($hasChanges, 'Repository should detect uncommitted changes');
-    }
+    expect($result)->toBeTrue()
+        ->and($gitRepo->getCurrentBranch())->toBe('feature/test-branch');
+})->covers(GitRepository::class);
 
-    public function testCheckoutReturnsFalseWhenBranchDoesNotExist(): void
-    {
-        $gitRepo = new GitRepository($this->testRepoPath);
+it('handles existing branch when checking out new branch', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        $result = $gitRepo->checkout('nonexistent-branch');
+    $result1 = $gitRepo->checkoutNewBranch('feature/test-branch');
+    expect($result1)->toBeTrue();
 
-        $this->assertFalse($result, 'Checkout should fail for non-existent branch');
-    }
+    $gitRepo->checkout('main');
 
-    public function testCheckoutNewBranchReturnsTrue(): void
-    {
-        $gitRepo = new GitRepository($this->testRepoPath);
+    $result2 = $gitRepo->checkoutNewBranch('feature/test-branch');
+    expect($result2)->toBeBool();
+})->covers(GitRepository::class);
 
-        $result = $gitRepo->checkoutNewBranch('feature/test-branch');
+it('can pull from remote', function () {
+    $gitRepo = new GitRepository($this->testRepoPath);
 
-        $this->assertTrue($result, 'Should successfully create new branch');
-        $this->assertEquals('feature/test-branch', $gitRepo->getCurrentBranch());
-    }
+    $result = $gitRepo->pull();
 
-    public function testCheckoutNewBranchHandlesExistingBranch(): void
-    {
-        $gitRepo = new GitRepository($this->testRepoPath);
+    expect($result)->toBeBool();
+})->covers(GitRepository::class);
 
-        // First checkout should succeed
-        $result1 = $gitRepo->checkoutNewBranch('feature/test-branch');
-        $this->assertTrue($result1);
+it('returns unknown for invalid repository path when getting current branch', function () {
+    $gitRepo = new GitRepository('/nonexistent/path');
 
-        // Checkout back to main first
-        $gitRepo->checkout('main');
+    $branch = $gitRepo->getCurrentBranch();
 
-        // Second checkout may succeed or fail depending on implementation
-        $result2 = $gitRepo->checkoutNewBranch('feature/test-branch');
-        $this->assertIsBool($result2);
-    }
+    expect($branch)->toBe('unknown');
+})->covers(GitRepository::class);
 
-    public function testPullReturnsTrueOnSuccess(): void
-    {
-        $gitRepo = new GitRepository($this->testRepoPath);
+it('returns null for invalid repository when determining main branch', function () {
+    $gitRepo = new GitRepository('/nonexistent/path');
 
-        // Pull from an empty remote (should still succeed)
-        $result = $gitRepo->pull();
+    $branch = $gitRepo->determineMainBranch();
 
-        // Note: This may fail in some environments, so we're just verifying
-        // the method doesn't throw an exception
-        $this->assertIsBool($result);
-    }
+    expect($branch)->toBeNull();
+})->covers(GitRepository::class);
 
-    public function testGetCurrentBranchReturnsUnknownForInvalidRepo(): void
-    {
-        $gitRepo = new GitRepository('/nonexistent/path');
+it('handles invalid repository gracefully for uncommitted changes', function () {
+    $gitRepo = new GitRepository('/nonexistent/path');
 
-        $branch = $gitRepo->getCurrentBranch();
+    $result = $gitRepo->hasUncommittedChanges();
 
-        $this->assertEquals('unknown', $branch);
-    }
-
-    public function testDetermineMainBranchReturnsNullForInvalidRepo(): void
-    {
-        $gitRepo = new GitRepository('/nonexistent/path');
-
-        $branch = $gitRepo->determineMainBranch();
-
-        $this->assertNull($branch);
-    }
-
-    public function testHasUncommittedChangesReturnsTrueForInvalidRepo(): void
-    {
-        $gitRepo = new GitRepository('/nonexistent/path');
-
-        // Should handle gracefully and not throw
-        $result = $gitRepo->hasUncommittedChanges();
-
-        $this->assertIsBool($result);
-    }
-}
+    expect($result)->toBeBool();
+})->covers(GitRepository::class);
