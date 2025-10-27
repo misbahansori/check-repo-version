@@ -170,7 +170,7 @@ final readonly class UpgradeNuxtProjectCommand
         $newVersion = $packageJson['dependencies']['nuxt'] ?? $packageJson['devDependencies']['nuxt'] ?? 'unknown';
 
         // Create a new branch with the version name
-        $versionBranchName = "upgrade/nuxt-{$newVersion}";
+        $versionBranchName = "upgrade/nuxt-" . str_replace('^', '', $newVersion);
         $this->console->info("Creating branch: {$versionBranchName}");
         if (!$gitRepo->checkoutNewBranch($versionBranchName)) {
             $this->console->error("Failed to create branch");

@@ -67,6 +67,7 @@ final readonly class GitRepository
     public function checkoutNewBranch(string $branchName): bool
     {
         $output = shell_exec("cd {$this->repositoryPath} && git checkout -b {$branchName} 2>&1");
-        return !str_contains(strtolower($output), 'error');
+
+        return !str_contains(strtolower($output), 'error') && !str_contains(strtolower($output), 'fatal');
     }
 }
