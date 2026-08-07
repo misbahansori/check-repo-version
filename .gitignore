@@ -6,6 +6,7 @@ vendor/
 /package-lock.json
 /.php-cs-fixer.cache
 .env
+forge-envs-output.txt
 .idea
 log
 
