@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
+use Tempest\Upgrade\Set\TempestLevelSetList;
 
 return RectorConfig::configure()
     ->withPaths([
@@ -12,4 +13,4 @@ return RectorConfig::configure()
     // uncomment to reach your current PHP version
     // ->withPhpSets()
     ->withTypeCoverageLevel(0)
-    ->withSets([__DIR__ . '/vendor/tempest/framework/packages/upgrade/src/tempest2.php']);
+    ->withSets([TempestLevelSetList::UP_TO_TEMPEST_314]);

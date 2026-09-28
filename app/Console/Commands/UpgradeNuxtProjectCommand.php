@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Exception;
 use Tempest\Console\ExitCode;
 use Tempest\Console\HasConsole;
 use Tempest\Console\ConsoleCommand;
@@ -74,7 +75,7 @@ final readonly class UpgradeNuxtProjectCommand
                         'version' => $result['version'],
                     ];
                 }
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 // Skip files that can't be analyzed
                 continue;
             }

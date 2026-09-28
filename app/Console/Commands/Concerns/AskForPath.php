@@ -3,7 +3,7 @@
 namespace App\Console\Commands\Concerns;
 
 use Tempest\Cache\Cache;
-use function Tempest\get;
+use function Tempest\Container\get;
 
 use Tempest\Console\ExitCode;
 

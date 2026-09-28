@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App;
 
-use Tempest\Http\Get;
+use function Tempest\View\view;
 
-use function Tempest\view;
-
+use Tempest\Router\Get;
 use Tempest\View\View;
 
 final readonly class HomeController
