@@ -2,8 +2,6 @@
 
 namespace App\ProjectAnalyzers;
 
-use App\ProjectAnalyzers\ProjectAnalyzerInterface;
-
 class PackageProjectAnalyzer implements ProjectAnalyzerInterface
 {
     public function analyze(string $filePath): array

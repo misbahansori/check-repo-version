@@ -5,8 +5,6 @@ namespace App\Console\Commands\Concerns;
 use Tempest\Cache\Cache;
 use function Tempest\Container\get;
 
-use Tempest\Console\ExitCode;
-
 trait AskForPath
 {
     private function askForPath(bool $shouldUseCache = true): ?string

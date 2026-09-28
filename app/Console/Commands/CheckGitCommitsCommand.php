@@ -6,13 +6,11 @@ use Tempest\Console\ExitCode;
 use Tempest\Console\HasConsole;
 use Tempest\Console\ConsoleCommand;
 use App\Console\Commands\Concerns\AskForPath;
-use App\Console\Commands\Concerns\ConsoleTable;
 
 final readonly class CheckGitCommitsCommand
 {
     use HasConsole;
     use AskForPath;
-    use ConsoleTable;
 
     #[ConsoleCommand(name: 'repo:commits')]
     public function check(?string $date = null, ?string $author = null, bool $cache = true)

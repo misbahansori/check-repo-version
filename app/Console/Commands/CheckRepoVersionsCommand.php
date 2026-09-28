@@ -2,7 +2,6 @@
 
 namespace App\Console\Commands;
 
-use Tempest\Cache\Cache;
 use Tempest\Console\ExitCode;
 use Tempest\Console\HasConsole;
 use Tempest\Console\ConsoleCommand;

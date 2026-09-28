@@ -18,8 +18,7 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "Tests\\": "tests/",
-      "Tests\\Tempest\\": "vendor/brendt/tempest/tests/"
+      "Tests\\": "tests/"
     }
   },
   "authors": [
@@ -29,11 +28,6 @@
     }
   ],
   "scripts": {
-    "post-create-project-cmd": [
-      "./vendor/bin/tempest install framework -f",
-      "./tempest discovery:generate",
-      "rm -r .github"
-    ],
     "post-package-update": [
       "./tempest discovery:generate"
     ],
