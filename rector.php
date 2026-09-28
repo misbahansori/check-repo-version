@@ -8,7 +8,6 @@ use Tempest\Upgrade\Set\TempestLevelSetList;
 return RectorConfig::configure()
     ->withPaths([
         __DIR__ . '/app',
-        __DIR__ . '/public',
     ])
     // uncomment to reach your current PHP version
     // ->withPhpSets()
